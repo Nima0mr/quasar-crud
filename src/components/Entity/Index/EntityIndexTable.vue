@@ -1,57 +1,59 @@
 <template>
   <div class="quasar-crud-index-table q-pa-md">
     <q-table
-      ref="table"
-      v-model:pagination="inputData.pagination"
-      :grid="$q.screen.lt.sm"
-      title="Treats"
-      :rows="inputData.data"
-      :columns="columns"
-      :loading="loading"
-      row-key="name"
-      :rows-per-page-options="[]"
-      @request="onChangePage"
+        ref="table"
+        v-model:pagination="inputData.pagination"
+        v-model:selected="tableChosenValues"
+        :grid="$q.screen.lt.sm"
+        :rows="inputData.data"
+        :columns="columns"
+        :loading="loading"
+        :row-key="rowKey"
+        :rows-per-page-options="[]"
+        :selected-rows-label="getSelectedString"
+        :selection="tableSelectionMode"
+        @request="onChangePage"
     >
       <template #top="props">
         <div class="col-2 q-table__title">{{ title }}</div>
         <q-space />
         <q-select
-          v-if="false"
-          v-model="visibleColumns"
-          multiple
-          dense
-          options-dense
-          :display-value="$q.lang.table.columns"
-          emit-value
-          map-options
-          :options="columns"
-          option-value="name"
-          style="min-width: 150px"
+            v-if="false"
+            v-model="visibleColumns"
+            multiple
+            dense
+            options-dense
+            :display-value="$q.lang.table.columns"
+            emit-value
+            map-options
+            :options="columns"
+            option-value="name"
+            style="min-width: 150px"
         />
         <q-btn
-          flat round dense
-          icon="search"
-          no-caps
-          @click="searchEvent"
+            flat round dense
+            icon="search"
+            no-caps
+            @click="searchEvent"
         >
           <q-tooltip>
             جستجو
           </q-tooltip>
         </q-btn>
         <q-btn
-          flat round dense
-          icon="archive"
-          no-caps
-          @click="exportTable"
+            flat round dense
+            icon="archive"
+            no-caps
+            @click="exportTable"
         >
           <q-tooltip>
             خروجی اکسل
           </q-tooltip>
         </q-btn>
         <q-btn
-          flat round dense
-          :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
-          @click="props.toggleFullscreen"
+            flat round dense
+            :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+            @click="props.toggleFullscreen"
         >
           <q-tooltip>
             تمام صفحه
@@ -68,34 +70,16 @@
       </template>
 
       <template v-slot:pagination>
-        <div>{{'صفحه ' + inputData.pagination.page + ' از ' + pagesNumber }}</div>
+        <div>{{'صفحه ' + crrPage + ' از ' + pagesNumber }}</div>
       </template>
     </q-table>
-    <div v-if="inputData.pagination" class="q-pa-lg flex flex-center">
-      <q-btn
-          icon="chevron_right"
-          color="grey-8"
-          round
-          dense
-          flat
-          :disable="inputData.pagination.page === 1 "
-          @click="prevPage"
-      />
+    <div v-if="pagesNumber > 1" class="q-pa-lg flex flex-center">
       <q-pagination
           v-model="targetPage"
           color="black"
           :max="pagesNumber"
-          :max-pages="3"
-          :boundary-numbers="false"
-      />
-      <q-btn
-          icon="chevron_left"
-          color="grey-8"
-          round
-          dense
-          flat
-          :disable="inputData.pagination.page === pagesNumber "
-          @click="nextPage"
+          :max-pages="6"
+          direction-links
       />
     </div>
   </div>
@@ -107,12 +91,12 @@ import { exportFile } from 'quasar'
 
 function wrapCsvValue (val, formatFn) {
   let formatted = (typeof formatFn !== 'undefined')
-    ? formatFn(val)
-    : val
+      ? formatFn(val)
+      : val
 
   formatted = (typeof formatted === 'undefined') || formatted === null
-    ? ''
-    : String(formatted)
+      ? ''
+      : String(formatted)
 
   formatted = formatted.split('"').join('""')
   /**
@@ -156,22 +140,53 @@ export default {
       default: () => [],
       type: Array
     },
+    rowKey: {
+      default: 'id',
+      type: String
+    },
     changePage: {
       default: () => {},
       type: Function
+    },
+    tableSelectedValues: {
+      type: Array,
+      default () {
+        return []
+      }
+    },
+    tableSelectionMode: {
+      type: String,
+      default () {
+        return 'none'
+      }
     }
   },
-  emits: ['search'],
+  emits: [
+    'search',
+    'update:tableSelectedValues'
+  ],
   data () {
     return {
+      selected: [],
       visibleColumns: [],
       tableKey: Date.now(),
-      targetPage: null
+      targetPage: 1
     }
   },
   computed: {
+    tableChosenValues: {
+      get () {
+        return this.tableSelectedValues
+      },
+      set (value) {
+        this.$emit('update:tableSelectedValues', value)
+      }
+    },
     pagesNumber () {
-      return Math.ceil(this.inputData.pagination.rowsNumber / this.inputData.pagination.rowsPerPage)
+      return this.inputData.pagination.rowsNumber? Math.ceil(this.inputData.pagination.rowsNumber / this.inputData.pagination.rowsPerPage) : 1
+    },
+    crrPage () {
+      return this.inputData.pagination.page ? this.inputData.pagination.page : 1
     }
   },
   mounted () {
@@ -193,30 +208,39 @@ export default {
     targetPage(){
       if(this.targetPage <= this.pagesNumber){
         setTimeout(()=> {
-              this.changePage(this.targetPage)
-            }, 1000)
+          this.changePage(this.targetPage)
+        }, 1000)
       }
     }
   },
   methods: {
+    getSelectedString () {
+      if (this.$q.lang.isoName === 'fa') {
+        return this.tableChosenValues.length === 0 ? '' : this.tableChosenValues.length + ' انتخاب از ' + this.inputData.data.length + ' مورد'
+      }
+      else if (!this.$q.lang.rtl) {
+        return this.tableChosenValues.length === 0 ? '' : this.tableChosenValues.length + ' record' + (this.tableChosenValues.length > 1 ? 's' : '') + ' selected of ' + this.inputData.data.length
+      }
+      return this.tableChosenValues.length === 0 ? '' : this.inputData.data.length + '/' + this.tableChosenValues.length
+    },
     searchEvent () {
       this.$emit('search')
     },
     exportTable () {
       // naive encoding to csv format
       const content = [this.columns.map(col => wrapCsvValue(col.label))].concat(
-        this.inputData.data.map(row => this.columns.map(col => wrapCsvValue(
-          typeof col.field === 'function'
-            ? col.field(row)
-            : row[typeof col.field === 'undefined' ? col.name : col.field],
-          col.format
-        )).join(','))
+          this.inputData.data.map(row => this.columns.map(col => wrapCsvValue(
+              typeof col.field === 'function'
+                  ? col.field(row)
+                  : row[typeof col.field === 'undefined' ? col.name : col.field],
+              col.format
+          )).join(','))
       ).join('\r\n')
 
       const status = exportFile(
-        'table-export.csv',
-        '\ufeff'+content,
-        'text/csv'
+          'table-export.csv',
+          '\ufeff'+content,
+          'text/csv'
       )
 
       if (status !== true) {

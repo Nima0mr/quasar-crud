@@ -1,20 +1,20 @@
 <template>
-  <portlet ref="portlet">
+  <portlet ref="portlet" class="entity-create">
     <template #title>
       {{ title }}
     </template>
     <template #toolbar>
-      <q-btn flat round icon="check" @click="createEntity()">
+      <q-btn v-if="showSaveButton" flat round icon="check" @click="runNeededMethod(onSaveButton, createEntity)">
         <q-tooltip>
           ذخیره
         </q-tooltip>
       </q-btn>
-      <q-btn flat round icon="close" @click="goToIndexView()">
+      <q-btn v-if="showCloseButton" flat round icon="close" @click="runNeededMethod(onCancelButton, goToIndexView)">
         <q-tooltip>
           لغو
         </q-tooltip>
       </q-btn>
-      <q-btn flat round :icon="(expanded) ? 'expand_less' : 'expand_more'" @click="expanded = !expanded">
+      <q-btn v-if="showExpandButton" flat round :icon="(expanded) ? 'expand_less' : 'expand_more'" @click="expanded = !expanded">
         <q-tooltip>
           <span v-if="expanded">عدم نمایش فرم</span>
           <span v-else>نمایش فرم</span>
@@ -23,7 +23,9 @@
     </template>
     <template #content>
       <q-expansion-item v-model="expanded">
-        <form-builder v-model:value="inputData" :disable="false" />
+        <slot name="before-form-builder"></slot>
+        <entity-crud-form-builder ref="formBuilder" v-model:value="inputData" :disable="false" />
+        <slot name="after-form-builder"></slot>
         <q-inner-loading :showing="loading">
           <q-spinner-ball color="primary" size="50px" />
         </q-inner-loading>
@@ -35,12 +37,16 @@
 <script>
 import Portlet from '../../../components/Portlet'
 import EntityMixin from '../../../mixins/EntityMixin'
-import { FormBuilder, inputMixin } from 'quasar-form-builder'
+import { inputMixin } from 'quasar-form-builder'
+import EntityCrudFormBuilder from '../EntityCrudFormBuilder'
 
 export default {
   name: 'EntityCreate',
-  components: { Portlet, FormBuilder },
-  mixins: [inputMixin, EntityMixin],
+  components: { EntityCrudFormBuilder, Portlet },
+  mixins: [
+    inputMixin,
+    EntityMixin
+  ],
   props: {
     value: {
       default: () => [],
@@ -63,7 +69,7 @@ export default {
       type: String
     },
     showRouteParamKey: {
-      default: '',
+      default: 'id',
       type: String
     },
     indexRouteName: {
@@ -90,21 +96,23 @@ export default {
     createEntity () {
       this.loading = true
       const formData = this.getFormData()
+      this.beforeSendData(formData, this.setNewInputData)
       this.$axios.post(this.api, formData, { headers: this.getHeaders() })
-        .then((response) => {
-          this.loading = false
-          this.$router.push({ name: this.showRouteName, params: { [this.showRouteParamKey]: response.data[this.entityIdKeyInResponse] } })
-        })
-        .catch(() => {
-          this.loading = false
-          this.getData()
-        })
+          .then((response) => {
+            this.loading = false
+            const entityId = this.getValidChainedObject(response.data, this.entityIdKeyInResponse.split('.'))
+            this.$router.push({ name: this.showRouteName, params: { [this.showRouteParamKey]: entityId } })
+          })
+          .catch(() => {
+            this.loading = false
+            this.getData()
+          })
     }
   }
 }
 </script>
 
 <style lang="sass">
-.q-expansion-item__container .q-item
+.entity-create .q-expansion-item__container .q-item
   display: none
 </style>

@@ -1,4 +1,8 @@
 import axios from 'axios'
+import { shallowRef } from 'vue'
+import EntityInput from '../components/Entity/Attachment/EntityInput'
+
+const EntityInputComp = shallowRef(EntityInput)
 
 const EntityMixin = {
   data () {
@@ -7,6 +11,56 @@ const EntityMixin = {
     }
   },
   props: {
+    showSaveButton: {
+      default: true,
+      type: Boolean
+    },
+    showExpandButton: {
+      default: true,
+      type: Boolean
+    },
+    showCloseButton: {
+      default: true,
+      type: Boolean
+    },
+    showReloadButton: {
+      default: true,
+      type: Boolean
+    },
+    showSearchButton: {
+      default: true,
+      type: Boolean
+    },
+    showIndexButton: {
+      default: true,
+      type: Boolean
+    },
+    showEditButton: {
+      default: true,
+      type: Boolean
+    },
+    onReloadButton: {
+      default () {
+        return false
+      },
+      type: [Function, Boolean]
+    },
+    onCancelButton: {
+      default () {
+        return false
+      },
+      type: [Function, Boolean]
+    },
+    onSaveButton: {
+      default () {
+        return false
+      },
+      type: [Function, Boolean]
+    },
+    beforeSendData: {
+      default: () => {},
+      type: Function
+    },
     beforeLoadInputData: {
       default: () => {},
       type: Function
@@ -22,8 +76,33 @@ const EntityMixin = {
     }
   },
   methods: {
+    runNeededMethod (substituteMethod, callBackMethod) {
+      if (!!substituteMethod && substituteMethod()){
+        substituteMethod()
+        return
+      }
+      callBackMethod()
+    },
     getEntityId () {
-      const target = this.inputData.find(item => item.name.toString() === this.entityIdKey.toString())
+
+      function getEntityIdFromNestedInputData (entityIdKey, inputs) {
+        for (let i = 0; i < inputs.length; i++) {
+          const input = inputs[i]
+          if (input.type !== 'formBuilder') {
+            if (input.name && input.name.toString() === entityIdKey) {
+              return input
+            }
+          } else {
+            const target = getEntityIdFromNestedInputData(entityIdKey, input.value)
+            if (target) {
+              return target
+            }
+          }
+        }
+
+        return false
+      }
+      const target = getEntityIdFromNestedInputData(this.entityIdKey.toString(), this.inputData)
       if (!target) {
         return false
       }
@@ -54,7 +133,8 @@ const EntityMixin = {
     getFormData () {
       const formHasFileInput = this.formHasFileInput()
       const formData = formHasFileInput ? new FormData() : {}
-      this.inputData.forEach(item => {
+      const inputs = this.$refs.formBuilder.getValues()
+      inputs.forEach(item => {
         if (item.disable || typeof item.value === 'undefined' || item.value === null) {
           return
         }
@@ -67,18 +147,12 @@ const EntityMixin = {
           formData.append(item.name, item.value)
         } else {
           this.createChainedObject(formData, item.name, item.value)
-          // formData[item.name] = item.value
         }
       })
 
       return formData
     },
     createChainedObject (formData, chainedName, value) {
-      // const formData = {}
-      // const chainedName = 'a.b.c'
-      // const value = 'valll'
-      // getObject(formData, chainedName, value)
-
       let keysArray = chainedName
       if (typeof chainedName === 'string') {
         keysArray = chainedName.split('.')
@@ -89,7 +163,7 @@ const EntityMixin = {
         if (typeof formData[keysArray[0]] === 'undefined') {
           formData[keysArray[0]] = {}
         }
-        const newKeysArray = keysArray.filter((item, index) => index != 0)
+        const newKeysArray = keysArray.filter((item, index) => index !== 0)
         this.createChainedObject(formData[keysArray[0]], newKeysArray, value)
       }
     },
@@ -100,10 +174,12 @@ const EntityMixin = {
           // success!
         })
         .catch((err) => {
-          alert(err)
           // uh, oh, error!!
-          // console.error(err)
+          console.error(err)
         })
+    },
+    isEntityInput (input) {
+      return input.type === EntityInputComp.value
     },
     getData () {
       this.loading = true
@@ -118,13 +194,42 @@ const EntityMixin = {
           this.loading = false
         })
     },
-    loadInputData (responseData) {
-      this.inputData.forEach(input => {
-        if (typeof input.responseKey !== 'undefined' && input.responseKey !== null) {
-          input.value = this.getValidChainedObject(responseData, input.responseKey.split('.'))
-        }
-      })
-      this.change(this.inputData)
+    loadInputData (responseData, inputs) {
+      const that = this
+      function setValueOfNestedInputData (responseData, inputs) {
+        inputs.forEach(input => {
+          if (typeof input.responseKey === 'undefined' || input.responseKey === null) {
+            return
+          }
+          if (input.type === 'formBuilder') {
+            setValueOfNestedInputData(responseData, input.value)
+            return
+          }
+          const validChainedObject = that.getValidChainedObject(responseData, input.responseKey)
+          // if (!this.isEntityInput(input)) {
+          if (input.type !== EntityInputComp.value) {
+            input.value = validChainedObject
+            return
+          }
+
+          input.selected = validChainedObject
+          if (Array.isArray(input.selected)) {
+            input.value = input.selected.map( selected => selected[input.itemIdentifyKey])
+            return
+          }
+          if (input.indexConfig && input.indexConfig.itemIdentifyKey && input.selected && input.selected[input.indexConfig.itemIdentifyKey]) {
+            input.value = input.selected[input.indexConfig.itemIdentifyKey]
+          } else {
+            console.error('input.indexConfig.itemIdentifyKey not set or input.selected[input.indexConfig.itemIdentifyKey] does not exist  : ', input)
+          }
+
+        })
+      }
+
+      if (!inputs) {
+        inputs = this.inputData
+      }
+      setValueOfNestedInputData(responseData, inputs)
     },
     getValidChainedObject (object, keys) {
       if (!Array.isArray(keys) && typeof keys !== 'string') {
@@ -142,7 +247,7 @@ const EntityMixin = {
       }
 
       if (keysArray.length === 1) {
-        if (typeof object[keysArray[0]] === 'undefined') {
+        if (!object || typeof object[keysArray[0]] === 'undefined') {
           return null
         }
         return object[keysArray[0]]

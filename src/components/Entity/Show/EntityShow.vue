@@ -1,25 +1,25 @@
 <template>
-  <portlet ref="portlet">
+  <portlet ref="portlet" class="entity-show">
     <template #title>
       {{ title }}
     </template>
     <template #toolbar>
-      <q-btn flat round icon="cached" @click="getData()">
+      <q-btn v-if="showReloadButton" flat round icon="cached" @click="runNeededMethod(onReloadButton, getData)">
         <q-tooltip>
           بارگذاری مجدد
         </q-tooltip>
       </q-btn>
-      <q-btn flat round icon="edit" @click="goToEditView()">
+      <q-btn v-if="showEditButton" flat round icon="edit" @click="runNeededMethod(onEditButton, goToEditView)">
         <q-tooltip>
           ویرایش
         </q-tooltip>
       </q-btn>
-      <q-btn flat round icon="list" @click="goToIndexView()">
+      <q-btn v-if="showIndexButton" flat round icon="list" @click="runNeededMethod(onListButton, goToIndexView)">
         <q-tooltip>
           لیست
         </q-tooltip>
       </q-btn>
-      <q-btn flat round :icon="(expanded) ? 'expand_less' : 'expand_more'" @click="expanded = !expanded">
+      <q-btn v-if="showExpandButton" flat round :icon="(expanded) ? 'expand_less' : 'expand_more'" @click="expanded = !expanded">
         <q-tooltip>
           <span v-if="expanded">عدم نمایش فرم</span>
           <span v-else>نمایش فرم</span>
@@ -28,7 +28,9 @@
     </template>
     <template #content>
       <q-expansion-item v-model="expanded">
-        <form-builder :key="key" v-model:value="inputData" disable />
+        <slot name="before-form-builder"></slot>
+        <entity-crud-form-builder :key="key" ref="formBuilder" v-model:value="inputData" :disable="true" />
+        <slot name="after-form-builder"></slot>
         <q-inner-loading :showing="loading">
           <q-spinner-ball color="primary" size="50px" />
         </q-inner-loading>
@@ -40,11 +42,12 @@
 <script>
 import Portlet from '../../../components/Portlet'
 import EntityMixin from '../../../mixins/EntityMixin'
-import { FormBuilder, inputMixin } from 'quasar-form-builder'
+import { inputMixin } from 'quasar-form-builder'
+import EntityCrudFormBuilder from '../EntityCrudFormBuilder'
 
 export default {
   name: 'EntityShow',
-  components: { Portlet, FormBuilder },
+  components: { Portlet, EntityCrudFormBuilder },
   mixins: [inputMixin, EntityMixin],
   props: {
     value: {
@@ -87,7 +90,19 @@ export default {
         }
       },
       type: Object
-    }
+    },
+    onEditButton: {
+      default () {
+        return false
+      },
+      type: [Function, Boolean]
+    },
+    onListButton: {
+      default () {
+        return false
+      },
+      type: [Function, Boolean]
+    },
   },
   data () {
     return {
@@ -109,6 +124,6 @@ export default {
 </script>
 
 <style lang="sass">
-.q-expansion-item__container .q-item
+.entity-show .q-expansion-item__container .q-item
   display: none
 </style>
